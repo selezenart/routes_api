@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% block title %} City deletion {% endblock %}
+
+{% block content %}
+<h1>City deletion</h1>
+<p>Are you sure you want to delete <b>{{ object }}</b> from database?</p>
+
+{% include 'form.html' with button_text='Yes, I am sure' button_color='danger'%}
+{% endblock %}
