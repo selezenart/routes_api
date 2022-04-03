@@ -3,6 +3,7 @@ from django.db import models
 
 
 class Train(models.Model):
+    id = models.AutoField(primary_key=True, verbose_name='ID')
     name = models.CharField(max_length=64, unique=True, verbose_name='Train number')
     travel_time = models.PositiveSmallIntegerField(verbose_name='Duration')
     departs_from = models.ForeignKey('cities.City', on_delete=models.CASCADE, related_name='departs_from_set',
