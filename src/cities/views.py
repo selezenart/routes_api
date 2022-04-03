@@ -7,7 +7,7 @@ from django.shortcuts import render
 from django.urls import reverse_lazy
 from django.views.generic import DetailView, CreateView, UpdateView, DeleteView, ListView
 
-from cities.froms import CityForm
+from cities.forms import CityForm
 from cities.models import City
 
 __all__ = (

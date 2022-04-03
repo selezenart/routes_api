@@ -1,21 +1,33 @@
 {% extends 'base.html' %}
-{% block title %} Cities {% endblock %}
+{% block title %} Trains {% endblock %}
 
 {% block content %}
-<h1>Cities</h1>
+<h1>Trains list</h1>
 <div class="row">
     <div class="col-md-4 my-2">
         <table class="table table-striped">
-            {% for object in page_obj %}
             <tr>
-                <td><a href="{% url 'cities:details' pk=object.pk%}" style="text-decoration:none;">{{object.name}}({{object.country}})</a>
-                </td>
-                <td><a href="{% url 'cities:update' pk=object.pk%}" style="text-decoration:none;">
+                <th>Number</th>
+                <th>Departs from</th>
+                <th>Arrives to</th>
+                <th>Duration time</th>
+                <th>&nbsp</th>
+                <th>&nbsp</th>
+            </tr>
+            {% for object in page_obj %}
+
+            <tr>
+                <td><a href="{% url 'trains:details' pk=object.id%}" style="text-decoration:none;">{{object.name}}</a></td>
+                <td>{{object.departs_from}}</td>
+                <td>{{object.arrives_to}}</td>
+                <td>{{object.travel_time}}</td>
+                <td><a href="{% url 'trains:update' pk=object.pk%}" style="text-decoration:none;">
                     <button type="submit" class="btn btn-dark">Edit</button>
                 </a></td>
-                <td><a href="{% url 'cities:delete' pk=object.pk%}" style="text-decoration:none;">
+                <td><a href="{% url 'trains:delete' pk=object.pk%}" style="text-decoration:none;">
                     <button type="submit" class="btn btn-danger">Delete</button>
                 </a></td>
+
             </tr>
             {% endfor %}
         </table>
@@ -46,6 +58,7 @@
                 {% endif %}
             </ul>
         </nav>
+        {#<a href="{% url 'trains:create'%}" class="btn btn-dark"> Add another train </a>#}
     </div>
 </div>
 {% endblock %}
