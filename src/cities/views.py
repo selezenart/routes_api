@@ -11,22 +11,8 @@ from cities.forms import CityForm
 from cities.models import City
 
 __all__ = (
-    'home', 'CityDetailView', 'CityCreateView', 'CityUpdateView', 'CityDeleteView','CityListView',
+    'CityDetailView', 'CityCreateView', 'CityUpdateView', 'CityDeleteView', 'CityListView',
 )
-
-
-def home(request):
-    if request.method == 'POST':
-        form = CityForm(request.POST)
-        if form.is_valid():
-            form.save()
-    form = CityForm()
-    qs = City.objects.all()
-    paginator = Paginator(qs, 5)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
-    context = {'page_obj': page_obj, 'form': form}
-    return render(request, 'cities/home.html', context)
 
 
 class CityDetailView(DetailView):
@@ -40,7 +26,6 @@ class CityCreateView(SuccessMessageMixin, CreateView):
     template_name = "cities/create.html"
     success_url = reverse_lazy('cities:home')
     success_message = "City was successfully added!"
-
 
 
 class CityUpdateView(SuccessMessageMixin, UpdateView):

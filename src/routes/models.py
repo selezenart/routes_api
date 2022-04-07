@@ -17,5 +17,17 @@ class Route(models.Model):
         verbose_name_plural = "Routes"
         ordering = ['startpoint', 'endpoint', 'name', ]
 
+   # def clean(self):
+   #     trains_time = self.trains.values_list('travel_time', flat=True)
+   #     if trains_time < self.travel_duration:
+   #         self.delete()
+   #         raise ValidationError(
+   #             f'You cannot spend less time in trip than in included trains. Selected trains take {trains_time} hours '
+   #             f'and the whole route takes {self.travel_duration} hours')
+#
+   # def save(self, *args, **kwargs):
+   #     super(Route, self).save(*args, **kwargs)
+   #     self.clean()
+
     def __str__(self):
         return f'Route №{self.name} from {self.startpoint} to {self.endpoint}'

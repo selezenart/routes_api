@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %} Find route {% endblock %}
+
+{% block content %}
+<h1>Find route</h1>
+<div class="row">
+    <div class="col-md-4">
+        <h3>Route{% ifnotequal routes|length 1 %}s{% endifnotequal %} from {{cities.startpoint}} to
+            {{cities.endpoint}}</h3>
+        <br>
+        {% for route in routes %}
+        {% if forloop.first %}
+        <h4>The shortest route</h4>
+        {% endif %} 
+        <h5>Route duration: {{ route.total_time }}</h5>
+        <table class="table table-secondary">
+            <thead>
+            <tr>
+                <th scope="col">#</th>
+                <th scope="col">List of trains in this route:</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for train in route.trains %}
+            <tr>
+                <th scope="row">{{ forloop.counter }}</th>
+                <td>{{train}}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% ifnotequal forloop.counter routes|length %}
+        <br><br>
+        {% endifnotequal %}
+        {% endfor %}
+
+        <a href="{% url 'home'%}" class="btn btn-dark">Back</a>
+    </div>
+</div>
+{% endblock %}
