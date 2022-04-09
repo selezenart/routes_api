@@ -2,6 +2,8 @@
 {% url 'trains:home' as trains_home_url%}
 {% url 'cities:create' as cities_create_url%}
 {% url 'trains:create' as trains_create_url%}
+{% url 'list' as list_url%}
+{% url 'details' as details_url%}
 <!doctype html>
 <html lang="en">
 <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
@@ -42,10 +44,11 @@
                        href="{% url 'cities:home'%}">Cities</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link {% if request.path == trains_home_url %} active {% endif %}" href="{% url 'trains:home'%}">Trains</a>
+                    <a class="nav-link {% if request.path == trains_home_url %} active {% endif %}"
+                       href="{% url 'trains:home'%}">Trains</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="#">Pricing</a>
+                    <a class="nav-link {% if request.path == list_url or request.path == details_url %} active {% endif %}" href="{% url 'list'%}">Routes</a>
                 </li>
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle {% if request.path == cities_create_url or request.path == trains_create_url %} active {% endif %}"

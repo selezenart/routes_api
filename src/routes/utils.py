@@ -70,5 +70,5 @@ def get_routes(request, form) -> dict:
     else:
         sorted_routes = sorted(routes, key=lambda r: r['total_time'])
     context['routes'] = sorted_routes
-    context['cities'] = {'startpoint': start.name, 'endpoint': end.name}
+    context['cities'] = {'startpoint': start, 'endpoint': end}
     return context

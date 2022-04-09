@@ -17,3 +17,19 @@ class RouteForm(forms.Form):
         'class': 'form-control',
         'placeholder': 'Input travel duration',
     }))
+
+
+class RouteModelForm(forms.ModelForm):
+    name = forms.CharField(label='Route name', widget=forms.TextInput(attrs={
+        'class': 'form-control',
+        'placeholder': 'Input route name'}))
+    startpoint = forms.ModelChoiceField(queryset=City.objects.all(), widget=forms.HiddenInput())
+    endpoint = forms.ModelChoiceField(queryset=City.objects.all(), widget=forms.HiddenInput())
+    travel_duration = forms.IntegerField(widget=forms.HiddenInput())
+    trains = forms.ModelMultipleChoiceField(
+        queryset=Train.objects.all(), required=True, widget=forms.SelectMultiple(
+            attrs={'class': 'form-control d-none'}))
+
+    class Meta:
+        model = Route
+        fields = '__all__'

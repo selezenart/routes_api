@@ -5,10 +5,15 @@
 <h1>Find route</h1>
 <div class="row">
     <div class="col-md-4">
-        <h3>Route{% ifnotequal routes|length 1 %}s{% endifnotequal %} from {{cities.startpoint}} to
-            {{cities.endpoint}}</h3>
+        <h3>Route{% ifnotequal routes|length 1 %}s{% endifnotequal %} from {{cities.startpoint.name}} to
+            {{cities.endpoint.name}}</h3>
         <br>
         {% for route in routes %}
+        <form action="{% url 'send_form'%}" method="post"> {% csrf_token %}
+            <input type="hidden" name="startpoint" value="{{cities.startpoint.id}}">
+            <input type="hidden" name="endpoint" value="{{cities.endpoint.id}}">
+            <input type="hidden" name="total_time" value="{{route.total_time}}">
+            <input type="hidden" name="trains" value="{% for train in route.trains %}{{train.id}},{% endfor %}">
         {% if forloop.first %}
         <h4>The shortest route</h4>
         {% endif %} 
@@ -29,9 +34,10 @@
             {% endfor %}
             </tbody>
         </table>
-        {% ifnotequal forloop.counter routes|length %}
+            <button type="submit" class="btn btn-success">Save</button>
+            </form>
+
         <br><br>
-        {% endifnotequal %}
         {% endfor %}
 
         <a href="{% url 'home'%}" class="btn btn-dark">Back</a>
