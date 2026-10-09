@@ -36,7 +36,16 @@ pip install -r requirements.txt
 cd src
 python manage.py migrate
 python manage.py createsuperuser   # optional, for /admin
-python manage.py runserver
+DJANGO_DEBUG=1 python manage.py runserver
 ```
 
 Then open http://127.0.0.1:8000. Add a few cities and trains, then search for a route.
+
+## Configuration
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `DJANGO_SECRET_KEY` | Secret key, which must be set in production | insecure key, for development only |
+| `DJANGO_DEBUG` | Set to `1` to turn on debug mode | off |
+| `DJANGO_ALLOWED_HOSTS` | Comma-separated host names | `localhost,127.0.0.1` |
+| `DATABASE_URL` | Database URL, e.g. PostgreSQL | local SQLite |
