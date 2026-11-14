@@ -191,3 +191,20 @@ def test_collect_survives_unexpected_error_in_first_cycle(tmp_path, plan_xml, fc
 
     assert code == 0
     assert "plan error" in output
+
+
+def test_collect_keeps_per_request_http_logs_quiet(tmp_path, plan_xml, fchg_xml):
+    import logging
+
+    engine = make_engine("sqlite:///:memory:")
+    create_schema(engine)
+
+    run_collect(
+        ["collect", "--once", "--stations", "8000157"],
+        collect_client(plan_xml, fchg_xml),
+        make_session_factory(engine),
+        tmp_path,
+    )
+
+    assert not logging.getLogger("httpx").isEnabledFor(logging.INFO)
+    assert logging.getLogger("tracker.collector").isEnabledFor(logging.INFO)

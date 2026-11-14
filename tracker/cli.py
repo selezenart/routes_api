@@ -142,6 +142,7 @@ def _collect(
     args, *, client: TimetablesClient, session_factory, out: TextIO, archive_dir, sleep, fixed_now, **_
 ) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # one line per request is noise
     unknown = [eva for eva in args.stations or [] if eva not in STATIONS]
     stations = {eva: STATIONS.get(eva, eva) for eva in args.stations or STATIONS}
     clock = {"clock": lambda: fixed_now} if fixed_now else {}
