@@ -207,4 +207,4 @@ def test_collect_keeps_per_request_http_logs_quiet(tmp_path, plan_xml, fchg_xml)
     )
 
     assert not logging.getLogger("httpx").isEnabledFor(logging.INFO)
-    assert logging.getLogger("tracker.collector").isEnabledFor(logging.INFO)
+    assert logging.getLogger("tracker.collector").level == logging.NOTSET  # not muted, inherits root
