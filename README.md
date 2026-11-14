@@ -66,4 +66,9 @@ pytest --cov                                      # tests run offline, no API ke
 
 `delays --save` writes to a local SQLite file by default. For PostgreSQL, run `docker compose up -d db` and set `DATABASE_URL` in `.env`.
 
-Test fixtures in `tracker/tests/fixtures/recorded/` are real responses from the Deutsche Bahn Timetables API (data: DB InfraGO AG / Deutsche Bahn, via developers.deutschebahn.com).
+### Data source and license
+
+Timetable and delay data comes from the [Deutsche Bahn Timetables API](https://developers.deutschebahn.com/) (© Deutsche Bahn / DB InfraGO AG), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
+- `tracker/tests/fixtures/recorded/` holds API responses saved unchanged.
+- Delay figures shown by the tracker are derived from that data (merged, aggregated). Deutsche Bahn does not endorse this project.
