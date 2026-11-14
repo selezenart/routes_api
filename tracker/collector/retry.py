@@ -6,6 +6,10 @@ import time
 from collections.abc import Callable
 from typing import TypeVar
 
+import httpx
+
+from tracker.collector.client import TimetablesError
+
 T = TypeVar("T")
 
 RETRY_STATUS = frozenset({429, 500, 502, 503, 504})
@@ -26,4 +30,13 @@ def call_with_retries(
     capped at ``max_delay``. After ``attempts`` tries the last error is raised. Any other
     error (e.g. 401/403) is raised at once without retrying.
     """
-    raise NotImplementedError  # week 2, task A
+    for attempt in range(attempts):
+        try:
+            return fn()
+        except (TimetablesError, httpx.TransportError) as error:
+            if isinstance(error, TimetablesError) and error.status_code not in RETRY_STATUS:
+                raise
+            if attempt == attempts - 1:
+                raise
+            sleep(min(base_delay * 2**attempt, max_delay))
+    raise ValueError("attempts must be at least 1")

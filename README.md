@@ -66,6 +66,26 @@ pytest --cov                                      # tests run offline, no API ke
 
 `delays --save` writes to a local SQLite file by default. For PostgreSQL, run `docker compose up -d db` and set `DATABASE_URL` in `.env`.
 
+### Continuous collection
+
+The collector polls every station in [`tracker/stations.py`](tracker/stations.py): planned timetables once an hour, changes every 3 minutes. Each cycle merges both into one row per train stop, retries temporary API errors with backoff, and keeps every raw response gzip-compressed under `data/raw/` (git-ignored) so data can be re-parsed later. One failing station never stops the others.
+
+```bash
+python -m tracker.cli collect --once     # one cycle for all stations, then exit
+python -m tracker.cli collect            # run on a schedule until stopped
+alembic upgrade head                     # create or update tables (PostgreSQL)
+```
+
+Run the whole stack (PostgreSQL + collector) in Docker:
+
+```bash
+mkdir -p data          # on Linux: make it writable for uid 1000 (chown 1000 data)
+docker compose up -d   # needs .env with DB_CLIENT_ID and DB_API_KEY
+docker compose logs -f collector
+```
+
+On macOS without Docker Desktop, [Colima](https://github.com/abiosoft/colima) works: `colima start` first.
+
 ### Data source and license
 
 Timetable and delay data comes from the [Deutsche Bahn Timetables API](https://developers.deutschebahn.com/) (© Deutsche Bahn / DB InfraGO AG), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).

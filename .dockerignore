@@ -1,0 +1,16 @@
+.env*
+!.env.example
+.venv
+.git
+data/
+tracker.db
+__pycache__/
+**/__pycache__/
+*.pyc
+src/
+.claude/
+CLAUDE.md
+tracker/tests/
+build/
+*.egg-info
+**/*.egg-info

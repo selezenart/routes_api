@@ -3,26 +3,36 @@
     python -m tracker.cli stations Heilbronn
     python -m tracker.cli delays --eva 8000157 [--hours 3] [--save]
     python -m tracker.cli record --eva 8000157
+    python -m tracker.cli collect [--once] [--stations EVA ...]
 """
 
 from __future__ import annotations
 
 import argparse
+import logging
+import signal
 import sys
+import time
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TextIO
 
+from apscheduler.schedulers.blocking import BlockingScheduler
 from sqlalchemy.orm import Session, sessionmaker
 
 from tracker.collector.client import TimetablesClient, TimetablesError
 from tracker.collector.merge import merge
 from tracker.collector.parser import BERLIN, Stop, parse_stations, parse_timetable
+from tracker.collector.poller import CycleResult, Poller
 from tracker.config import ConfigError, load_settings
 from tracker.db.session import create_schema, make_engine, make_session_factory
 from tracker.db.store import upsert_stops
+from tracker.stations import STATIONS
 
 HEILBRONN_HBF = "8000157"
+PLAN_REFRESH_MINUTES = 60
+CHANGES_POLL_MINUTES = 3
 LATE_MINUTES = 6  # DB counts a train as on time below 6 minutes
 RECORDED_DIR = Path(__file__).parent / "tests" / "fixtures" / "recorded"
 
@@ -35,17 +45,23 @@ def main(
     now: datetime | None = None,
     out: TextIO | None = None,
     err: TextIO | None = None,
+    archive_dir: Path | None = None,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> int:
     out = out or sys.stdout
     err = err or sys.stderr
     args = _build_parser().parse_args(argv)
+    fixed_now = now  # tests pin the clock; a real run follows the wall clock
     now = (now or datetime.now(BERLIN)).astimezone(BERLIN)
 
     try:
         if client is None:
             settings = load_settings()
             client = TimetablesClient(settings.client_id, settings.api_key)
-        if getattr(args, "save", False) and session_factory is None:
+        collecting = args.command == "collect"
+        if collecting and archive_dir is None:
+            archive_dir = Path(load_settings(require_api=False).raw_archive_dir)
+        if (getattr(args, "save", False) or collecting) and session_factory is None:
             url = load_settings(require_api=False).database_url
             engine = make_engine(url)
             if url.startswith("sqlite"):  # PostgreSQL gets its tables from Alembic
@@ -57,7 +73,16 @@ def main(
 
     with client:
         try:
-            return args.handler(args, client=client, session_factory=session_factory, now=now, out=out)
+            return args.handler(
+                args,
+                client=client,
+                session_factory=session_factory,
+                now=now,
+                out=out,
+                archive_dir=archive_dir,
+                sleep=sleep,
+                fixed_now=fixed_now,
+            )
         except TimetablesError as error:
             print(f"Error: {error}", file=err)
             return 1
@@ -72,7 +97,7 @@ def _stations(args, *, client: TimetablesClient, out: TextIO, **_) -> int:
     return 0
 
 
-def _delays(args, *, client: TimetablesClient, session_factory, now: datetime, out: TextIO) -> int:
+def _delays(args, *, client: TimetablesClient, session_factory, now: datetime, out: TextIO, **_) -> int:
     start = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
     end = start + timedelta(hours=args.hours)
     plans = [parse_timetable(client.plan(args.eva, start + timedelta(hours=i))) for i in range(args.hours)]
@@ -111,6 +136,66 @@ def _record(args, *, client: TimetablesClient, now: datetime, out: TextIO, **_) 
         (folder / name).write_text(xml, encoding="utf-8")
         print(f"Wrote {folder / name}", file=out)
     return 0
+
+
+def _collect(
+    args, *, client: TimetablesClient, session_factory, out: TextIO, archive_dir, sleep, fixed_now, **_
+) -> int:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    unknown = [eva for eva in args.stations or [] if eva not in STATIONS]
+    stations = {eva: STATIONS.get(eva, eva) for eva in args.stations or STATIONS}
+    clock = {"clock": lambda: fixed_now} if fixed_now else {}
+    poller = Poller(client, session_factory, stations=stations, archive_dir=archive_dir, sleep=sleep, **clock)
+    if unknown:
+        logging.getLogger("tracker.collector").warning("Unknown EVA numbers, using them as names: %s", unknown)
+
+    plan_results = poller.refresh_plans()
+    results = poller.poll_changes()
+    for result in results:
+        print(_cycle_line(result, stations[result.eva], plan_results), file=out)
+    if args.once:
+        return 1 if all(r.error for r in results) else 0
+
+    scheduler = build_scheduler(poller)
+    print(
+        f"Collecting {len(stations)} stations: plans every {PLAN_REFRESH_MINUTES} min, "
+        f"changes every {CHANGES_POLL_MINUTES} min. Ctrl-C to stop.",
+        file=out,
+    )
+    _stop_on_sigterm(scheduler)
+    try:
+        scheduler.start()
+    except (KeyboardInterrupt, SystemExit):
+        pass
+    return 0
+
+
+def _stop_on_sigterm(scheduler: BlockingScheduler) -> None:
+    """Make ``docker stop`` (SIGTERM) end the scheduler cleanly, exit code 0."""
+
+    def handler(signum, frame):
+        scheduler.shutdown(wait=False)
+
+    signal.signal(signal.SIGTERM, handler)
+
+
+def _cycle_line(result: CycleResult, name: str, plan_results: list[CycleResult]) -> str:
+    plan_error = next((p.error for p in plan_results if p.eva == result.eva and p.error), None)
+    line = f"{result.eva}  {name}: " + (f"error: {result.error}" if result.error else f"{result.stops_saved} stops saved")
+    return f"{line} (plan error: {plan_error})" if plan_error else line
+
+
+def build_scheduler(poller: Poller) -> BlockingScheduler:
+    """Scheduler with the two recurring jobs. The caller runs the first cycle and starts it."""
+    scheduler = BlockingScheduler(timezone=BERLIN)
+    options = {"max_instances": 1, "coalesce": True}
+    scheduler.add_job(
+        poller.refresh_plans, "interval", minutes=PLAN_REFRESH_MINUTES, id="refresh_plans", **options
+    )
+    scheduler.add_job(
+        poller.poll_changes, "interval", minutes=CHANGES_POLL_MINUTES, id="poll_changes", **options
+    )
+    return scheduler
 
 
 def _row(stop: Stop) -> str:
@@ -165,6 +250,11 @@ def _build_parser() -> argparse.ArgumentParser:
     record.add_argument("--hours", type=_positive_int, default=2, help="planned hours to save, from now")
     record.add_argument("--out", default=str(RECORDED_DIR))
     record.set_defaults(handler=_record)
+
+    collect = commands.add_parser("collect", help="poll all stations on a schedule and store the stops")
+    collect.add_argument("--once", action="store_true", help="run one cycle and exit")
+    collect.add_argument("--stations", nargs="+", metavar="EVA", help="EVA numbers (default: all)")
+    collect.set_defaults(handler=_collect)
     return parser
 
 
