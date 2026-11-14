@@ -49,3 +49,26 @@ Then open http://127.0.0.1:8000. Add a few cities and trains, then search for a 
 | `DJANGO_DEBUG` | Set to `1` to turn on debug mode | off |
 | `DJANGO_ALLOWED_HOSTS` | Comma-separated host names | `localhost,127.0.0.1` |
 | `DATABASE_URL` | Database URL, e.g. PostgreSQL | local SQLite |
+
+## Delay tracker (in progress)
+
+`tracker/` is a new part of this repo that records real Deutsche Bahn delays from the official [Timetables API](https://developers.deutschebahn.com/). It will grow into a FastAPI service that ranks connections by expected delay, reusing the graph search idea above. The Django app in `src/` is unchanged.
+
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+cp .env.example .env          # then fill in DB_CLIENT_ID and DB_API_KEY
+python -m tracker.cli stations "Heilbronn Hbf"    # find a station's EVA number
+python -m tracker.cli delays --eva 8000157        # current delays at Heilbronn Hbf
+python -m tracker.cli delays --save               # same, and store them in the database
+pytest --cov                                      # tests run offline, no API key needed
+```
+
+`delays --save` writes to a local SQLite file by default. For PostgreSQL, run `docker compose up -d db` and set `DATABASE_URL` in `.env`.
+
+### Data source and license
+
+Timetable and delay data comes from the [Deutsche Bahn Timetables API](https://developers.deutschebahn.com/) (© Deutsche Bahn / DB InfraGO AG), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
+- `tracker/tests/fixtures/recorded/` holds API responses saved unchanged.
+- Delay figures shown by the tracker are derived from that data (merged, aggregated). Deutsche Bahn does not endorse this project.

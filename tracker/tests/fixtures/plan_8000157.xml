@@ -1,0 +1,25 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<timetable station="Heilbronn Hbf">
+  <!-- Regional train that arrives and departs -->
+  <s id="1111111111111111111-2611131204-5">
+    <tl f="N" t="p" o="800734" c="RE" n="19412"/>
+    <ar pt="2611131204" pp="3" l="RE8" ppth="Würzburg Hbf|Lauda|Osterburken|Bad Friedrichshall Hbf"/>
+    <dp pt="2611131206" pp="3" l="RE8" ppth="Lauffen(Neckar)|Bietigheim-Bissingen|Stuttgart Hbf"/>
+  </s>
+  <!-- Train that starts here: departure only -->
+  <s id="2222222222222222222-2611131215-1">
+    <tl f="N" t="p" o="800734" c="RB" n="19510"/>
+    <dp pt="2611131215" pp="1" l="RB18" ppth="Neckarsulm|Bad Friedrichshall Hbf|Mosbach-Neckarelz"/>
+  </s>
+  <!-- Long-distance train without a line number -->
+  <s id="3333333333333333333-2611131230-7">
+    <tl f="F" t="p" o="80" c="IC" n="2062"/>
+    <ar pt="2611131230" pp="2" ppth="Nürnberg Hbf|Crailsheim|Schwäbisch Hall-Hessental"/>
+    <dp pt="2611131232" pp="2" ppth="Mannheim Hbf|Frankfurt(Main)Hbf"/>
+  </s>
+  <!-- Train that ends here: arrival only -->
+  <s id="4444444444444444444-2611131250-9">
+    <tl f="N" t="p" o="800734" c="RE" n="19437"/>
+    <ar pt="2611131250" pp="4" l="RE10a" ppth="Stuttgart Hbf|Bietigheim-Bissingen|Lauffen(Neckar)"/>
+  </s>
+</timetable>

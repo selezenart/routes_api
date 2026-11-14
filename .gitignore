@@ -246,7 +246,7 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-# .env
+.env
 .env/
 .venv/
 env/
@@ -289,3 +289,5 @@ Thumbs.db
 
 #Database
 #data/app.db
+# Delay tracker local data
+tracker.db
