@@ -1,0 +1,26 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<timetable station="Heilbronn Hbf" eva="8000157">
+  <!-- RE 8: 7 minutes late on arrival, 8 on departure, platform change -->
+  <s id="1111111111111111111-2611131204-5" eva="8000157">
+    <m id="r1" t="d" c="43" ts="2611131150"/>
+    <ar ct="2611131211" cp="5"/>
+    <dp ct="2611131214" cp="5"/>
+  </s>
+  <!-- RB 18: departure cancelled -->
+  <s id="2222222222222222222-2611131215-1" eva="8000157">
+    <dp cs="c" clt="2611131140"/>
+  </s>
+  <!-- Change for a stop outside the fetched plan hour: no planned data known yet -->
+  <s id="5555555555555555555-2611131410-3" eva="8000157">
+    <dp ct="2611131418"/>
+  </s>
+  <!-- Message only (e.g. construction notice): no arrival or departure, nothing to merge -->
+  <s id="3333333333333333333-2611131230-7" eva="8000157">
+    <m id="r2" t="h" from="2611010000" to="2612312359" cat="Bauarbeiten" ts="2611131100" ts-tts="26-11-13 11:00:00.000" pr="2"/>
+  </s>
+  <!-- Extra train that is not in the plan at all, sent with full data -->
+  <s id="6666666666666666666-2611131240-2" eva="8000157">
+    <tl f="N" t="e" o="800734" c="RE" n="19999"/>
+    <dp pt="2611131240" ct="2611131242" pp="6" ps="a" l="RE8"/>
+  </s>
+</timetable>
