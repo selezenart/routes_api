@@ -5,10 +5,13 @@ from tracker.db.models import Base
 
 
 def make_engine(url: str) -> Engine:
-    """Engine for ``url`` with the tables created. Alembic migrations replace this in week 2."""
-    engine = create_engine(url)
+    """Engine for ``url``. Tables come from Alembic (``alembic upgrade head``)."""
+    return create_engine(url)
+
+
+def create_schema(engine: Engine) -> None:
+    """Create all tables directly. For tests and local SQLite only; PostgreSQL uses Alembic."""
     Base.metadata.create_all(engine)
-    return engine
 
 
 def make_session_factory(engine: Engine) -> sessionmaker[Session]:

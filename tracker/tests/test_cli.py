@@ -8,7 +8,7 @@ from tracker import cli
 from tracker.collector.client import TimetablesClient
 from tracker.collector.parser import BERLIN
 from tracker.db.models import StopEvent
-from tracker.db.session import make_engine, make_session_factory
+from tracker.db.session import create_schema, make_engine, make_session_factory
 
 NOW = datetime(2026, 11, 13, 12, 10, tzinfo=BERLIN)
 
@@ -47,6 +47,7 @@ def test_delays_prints_table_and_summary(plan_xml, fchg_xml):
 
 def test_delays_save_writes_to_database(plan_xml, fchg_xml):
     engine = make_engine("sqlite:///:memory:")
+    create_schema(engine)
 
     code, output = run(
         ["delays", "--save"], plan_xml, fchg_xml, session_factory=make_session_factory(engine)

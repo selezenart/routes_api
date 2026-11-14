@@ -19,7 +19,7 @@ from tracker.collector.client import TimetablesClient, TimetablesError
 from tracker.collector.merge import merge
 from tracker.collector.parser import BERLIN, Stop, parse_stations, parse_timetable
 from tracker.config import ConfigError, load_settings
-from tracker.db.session import make_engine, make_session_factory
+from tracker.db.session import create_schema, make_engine, make_session_factory
 from tracker.db.store import upsert_stops
 
 HEILBRONN_HBF = "8000157"
@@ -47,7 +47,10 @@ def main(
             client = TimetablesClient(settings.client_id, settings.api_key)
         if getattr(args, "save", False) and session_factory is None:
             url = load_settings(require_api=False).database_url
-            session_factory = make_session_factory(make_engine(url))
+            engine = make_engine(url)
+            if url.startswith("sqlite"):  # PostgreSQL gets its tables from Alembic
+                create_schema(engine)
+            session_factory = make_session_factory(engine)
     except ConfigError as error:
         print(error, file=err)
         return 2

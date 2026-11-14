@@ -4,13 +4,14 @@ from sqlalchemy import select
 from tracker.collector.merge import merge
 from tracker.collector.parser import parse_timetable
 from tracker.db.models import StopEvent
-from tracker.db.session import make_engine, make_session_factory
+from tracker.db.session import create_schema, make_engine, make_session_factory
 from tracker.db.store import upsert_stops
 
 
 @pytest.fixture
 def session():
     engine = make_engine("sqlite:///:memory:")
+    create_schema(engine)
     with make_session_factory(engine)() as session:
         yield session
 

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from dotenv import find_dotenv, load_dotenv
 
 DEFAULT_DATABASE_URL = "sqlite:///tracker.db"
+DEFAULT_RAW_ARCHIVE_DIR = "data/raw"  # git-ignored
 
 
 class ConfigError(Exception):
@@ -19,9 +20,10 @@ class Settings:
     client_id: str
     api_key: str
     database_url: str
+    raw_archive_dir: str = DEFAULT_RAW_ARCHIVE_DIR
 
     def __repr__(self) -> str:  # keep secrets out of logs and tracebacks
-        return f"Settings(client_id=***, api_key=***, database_url={self.database_url!r})"
+        return f"Settings(client_id=***, api_key=***, database_url={self.database_url!r}, raw_archive_dir={self.raw_archive_dir!r})"
 
 
 def load_settings(*, require_api: bool = True) -> Settings:
@@ -37,4 +39,5 @@ def load_settings(*, require_api: bool = True) -> Settings:
         client_id=client_id,
         api_key=api_key,
         database_url=os.environ.get("DATABASE_URL") or DEFAULT_DATABASE_URL,
+        raw_archive_dir=os.environ.get("RAW_ARCHIVE_DIR") or DEFAULT_RAW_ARCHIVE_DIR,
     )

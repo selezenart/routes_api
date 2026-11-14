@@ -291,3 +291,4 @@ Thumbs.db
 #data/app.db
 # Delay tracker local data
 tracker.db
+data/
