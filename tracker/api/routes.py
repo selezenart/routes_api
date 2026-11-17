@@ -20,7 +20,7 @@ from tracker.api.schemas import (
 from tracker.db.stats import hour_stats, line_stats, station_stats
 from tracker.stations import STATIONS
 
-router = APIRouter(tags=["stats"])
+router = APIRouter()
 
 SessionDep = Annotated[Session, Depends(get_session)]
 PeriodDep = Annotated[PeriodRange, Depends(get_period)]
@@ -35,13 +35,13 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.get("/stations", summary="All stations, worst delay first")
+@router.get("/stations", summary="All stations, worst delay first", tags=["stats"])
 def stations(session: SessionDep, p: PeriodDep) -> StationList:
     rows = station_stats(session, p.start, p.end, p.now)
     return StationList(period=_period(p), stations=rows)
 
 
-@router.get("/stations/{eva}", summary="One station: by hour and worst lines")
+@router.get("/stations/{eva}", summary="One station: by hour and worst lines", tags=["stats"])
 def station_detail(eva: str, session: SessionDep, p: PeriodDep) -> StationDetail:
     if eva not in STATIONS:
         raise HTTPException(404, f"Unknown station {eva}")
@@ -57,12 +57,12 @@ def station_detail(eva: str, session: SessionDep, p: PeriodDep) -> StationDetail
     )
 
 
-@router.get("/lines", summary="All lines, worst delay first")
+@router.get("/lines", summary="All lines, worst delay first", tags=["stats"])
 def lines(session: SessionDep, p: PeriodDep) -> LineList:
     return LineList(period=_period(p), lines=line_stats(session, p.start, p.end, p.now))
 
 
-@router.get("/lines/{line}", summary="One line: by station and hour")
+@router.get("/lines/{line}", summary="One line: by station and hour", tags=["stats"])
 def line_detail(line: str, session: SessionDep, p: PeriodDep) -> LineDetail:
     rows = line_stats(session, p.start, p.end, p.now, line=line)
     if not rows or rows[0].stops == 0:

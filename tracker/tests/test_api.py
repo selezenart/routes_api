@@ -259,6 +259,9 @@ def test_docs_and_openapi(client):
     assert {"/health", "/stations", "/stations/{eva}", "/lines", "/lines/{line}"} <= set(spec["paths"])
     for path in spec["paths"].values():
         assert path["get"]["summary"] and path["get"]["tags"]
+    tags = {route: spec["paths"][route]["get"]["tags"] for route in spec["paths"]}
+    assert tags["/health"] == ["health"]  # listed once in /docs, not also under "stats"
+    assert all(t == ["stats"] for route, t in tags.items() if route != "/health")
 
 
 def test_responses_do_not_leak_settings(client, monkeypatch):
