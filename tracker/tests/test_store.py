@@ -45,3 +45,15 @@ def test_upsert_updates_existing_row_instead_of_duplicating(session, plan_xml, f
     assert len(rows) == 5
     rb18 = next(r for r in rows if r.number == "19510")
     assert rb18.cancelled
+
+
+def test_upsert_fills_stats_columns(session, plan_xml, fchg_xml):
+    stops = merge(parse_timetable(plan_xml).stops, parse_timetable(fchg_xml).stops)
+    upsert_stops(session, "8000157", "Heilbronn Hbf", stops)
+    session.commit()
+
+    re8 = session.scalars(select(StopEvent).where(StopEvent.line == "RE8")).first()
+    assert re8.planned_time == re8.planned_departure
+    assert re8.delay_minutes == 8
+    assert re8.hour_berlin == re8.planned_departure.hour
+    assert re8.weekday_berlin == re8.planned_departure.weekday()

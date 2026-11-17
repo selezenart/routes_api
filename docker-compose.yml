@@ -14,19 +14,48 @@ services:
       interval: 5s
       retries: 10
 
+  migrate:
+    build: .
+    init: true
+    command: alembic upgrade head
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-tracker}:${POSTGRES_PASSWORD:-tracker}@db:5432/${POSTGRES_DB:-tracker}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
   collector:
     build: .
     init: true
+    command: python -m tracker.cli collect
     stop_grace_period: 20s
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+psycopg://tracker:tracker@db:5432/tracker
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-tracker}:${POSTGRES_PASSWORD:-tracker}@db:5432/${POSTGRES_DB:-tracker}
       RAW_ARCHIVE_DIR: /app/data/raw
     volumes:
       - ./data:/app/data
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  api:
+    build: .
+    init: true
+    command: uvicorn tracker.api.main:app --host 0.0.0.0 --port 8000
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-tracker}:${POSTGRES_PASSWORD:-tracker}@db:5432/${POSTGRES_DB:-tracker}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
 volumes:

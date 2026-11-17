@@ -1,7 +1,9 @@
 """Response shapes of the stats API. Shared contract for tracker/db/stats.py and tracker/api/.
 
 Definitions (DB's own): a stop counts as on time when its delay is under 6 minutes.
-Only stops whose planned time lies in the requested period AND in the past are counted.
+Only stops whose planned time lies in the requested period AND in the past are counted, and only
+if the collector saw them at or after their planned time (``updated_at >= planned_time``): a stop
+missed while the collector was paused keeps a stale prediction and would look on time.
 A stop's delay is its departure delay, or its arrival delay if the train ends there.
 """
 

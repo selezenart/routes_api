@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from tracker.collector.parser import Event, Stop
+from tracker.collector.parser import BERLIN, Event, Stop
 from tracker.db.models import StopEvent
 
 _NONE = Event()
@@ -26,7 +26,8 @@ def upsert_stops(session: Session, eva: str, station: str, stops: Sequence[Stop]
             )
         )
     }
-    now = datetime.now(UTC)
+    # Berlin-aware so SQLite (wall time) compares updated_at with planned_time consistently.
+    now = datetime.now(UTC).astimezone(BERLIN)
     for stop in stops:
         row = existing.get(stop.stop_id)
         if row is None:
@@ -51,3 +52,8 @@ def _fill(row: StopEvent, station: str, stop: Stop, now: datetime) -> None:
     row.changed_platform = departure.changed_platform or arrival.changed_platform
     row.cancelled = stop.cancelled
     row.updated_at = now
+    row.planned_time = stop.planned_time
+    row.delay_minutes = stop.delay_minutes
+    local = stop.planned_time.astimezone(BERLIN) if stop.planned_time else None
+    row.hour_berlin = local.hour if local else None
+    row.weekday_berlin = local.weekday() if local else None
