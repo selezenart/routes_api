@@ -10,6 +10,7 @@ A stop's delay is its departure delay, or its arrival delay if the train ends th
 from __future__ import annotations
 
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -64,3 +65,52 @@ class StationList(BaseModel):
 class LineList(BaseModel):
     period: Period
     lines: list[LineStats] = Field(description="Highest avg delay first")
+
+
+# --- Week 4: most reliable connection -------------------------------------------------------
+# Built from history: trains are linked across stations by DB's trip id (stop_id without its
+# last "-<n>" part; that last number is the stop's order in the trip). A "service" is one line
+# leaving station A at the same planned time of day and reaching station B; its numbers come
+# from every observed past run in the period, split by day type (weekday / weekend).
+
+
+class ConnectionLeg(BaseModel):
+    line: str
+    from_eva: str
+    from_name: str
+    to_eva: str
+    to_name: str
+    departure: str = Field(description="Planned departure at from_eva, HH:MM Europe/Berlin")
+    arrival: str = Field(description="Planned arrival at to_eva, HH:MM Europe/Berlin")
+    runs: int = Field(description="Observed past runs this leg is based on")
+    avg_arrival_delay_minutes: float | None = Field(description="Mean arrival delay of runs that ran")
+    on_time_share: float | None = Field(description="Share of runs that ran and arrived under 6 min late")
+    cancelled_share: float = Field(description="Share of runs cancelled on this leg")
+
+
+class ConnectionOption(BaseModel):
+    legs: list[ConnectionLeg]
+    transfers: int
+    transfer_minutes: list[int] = Field(description="Planned slack at each transfer station")
+    planned_departure: str
+    planned_arrival: str
+    planned_duration_minutes: int
+    missed_transfer_share: float | None = Field(
+        description="Share of first-leg runs too late for the transfer; null for direct trains"
+    )
+    expected_arrival_delay_minutes: float = Field(
+        description="Expected delay at the destination, including waiting for the next train after a miss"
+    )
+    on_time_share: float | None = Field(description="Chance to reach the destination under 6 min late")
+
+
+class ConnectionSearch(BaseModel):
+    period: Period = Field(description="History used for the numbers")
+    from_eva: str
+    from_name: str
+    to_eva: str
+    to_name: str
+    depart_after: str = Field(description="HH:MM Europe/Berlin; options depart within 3 hours after")
+    day_type: Literal["weekday", "weekend"]
+    options: list[ConnectionOption] = Field(description="Best first (earliest expected arrival), at most 3")
+    message: str | None = Field(default=None, description="Why options is empty, if it is")
