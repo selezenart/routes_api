@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from tracker.api import routes
 from tracker.api.main import create_app
-from tracker.api.schemas import HourStats, LineStats, StationStats
+from tracker.api.schemas import ConnectionLeg, ConnectionOption, HourStats, LineStats, StationStats
 
 BERLIN = ZoneInfo("Europe/Berlin")
 NOW = datetime(2026, 11, 17, 12, 30, tzinfo=BERLIN)
@@ -256,12 +256,155 @@ def test_docs_and_openapi(client):
     assert client.get("/docs").status_code == 200
     spec = client.get("/openapi.json").json()
     assert spec["info"]["title"] == "Bahn Delay Tracker API"
-    assert {"/health", "/stations", "/stations/{eva}", "/lines", "/lines/{line}"} <= set(spec["paths"])
+    assert {"/health", "/stations", "/stations/{eva}", "/lines", "/lines/{line}", "/connections"} <= set(spec["paths"])
     for path in spec["paths"].values():
         assert path["get"]["summary"] and path["get"]["tags"]
     tags = {route: spec["paths"][route]["get"]["tags"] for route in spec["paths"]}
     assert tags["/health"] == ["health"]  # listed once in /docs, not also under "stats"
-    assert all(t == ["stats"] for route, t in tags.items() if route != "/health")
+    assert tags["/connections"] == ["connections"]
+    assert all(t == ["stats"] for route, t in tags.items() if route not in ("/health", "/connections"))
+
+
+# --- /connections: fake search_connections ---
+
+FRA = "8000105"
+
+
+def _option():
+    leg = ConnectionLeg(
+        line="ICE 512", from_eva=EVA, from_name="Stuttgart Hbf", to_eva=FRA, to_name="Frankfurt(Main)Hbf",
+        departure="08:00", arrival="09:30", runs=12, avg_arrival_delay_minutes=4.0,
+        on_time_share=0.75, cancelled_share=0.0,
+    )
+    return ConnectionOption(
+        legs=[leg], transfers=0, transfer_minutes=[], planned_departure="08:00", planned_arrival="09:30",
+        planned_duration_minutes=90, missed_transfer_share=None, expected_arrival_delay_minutes=4.0,
+        on_time_share=0.75,
+    )
+
+
+@pytest.fixture
+def search(monkeypatch):
+    calls = []
+    result = {"options": [_option()]}
+
+    def fake(session, from_eva, to_eva, depart_after, day_type, start, end, now, **kw):
+        calls.append({
+            "session": session, "from_eva": from_eva, "to_eva": to_eva, "depart_after": depart_after,
+            "day_type": day_type, "start": start, "end": end, "now": now, **kw,
+        })
+        return result["options"]
+
+    monkeypatch.setattr(routes, "search_connections", fake)
+    fake.calls = calls
+    fake.result = result
+    return fake
+
+
+def _conn(client, **params):
+    base = {"from_eva": EVA, "to_eva": FRA, "depart_after": "08:00"}
+    return client.get("/connections", params={**base, **params})
+
+
+def test_connections_params_passed_through(client, search):
+    from datetime import time
+
+    r = _conn(client, depart_after="07:45", day="weekend", **{"from": "2026-11-01", "to": "2026-11-05"})
+    assert r.status_code == 200
+    (c,) = search.calls
+    assert (c["from_eva"], c["to_eva"]) == (EVA, FRA)
+    assert c["depart_after"] == time(7, 45)
+    assert c["day_type"] == "weekend"
+    assert c["start"] == datetime(2026, 11, 1, tzinfo=BERLIN)
+    assert c["end"] == datetime(2026, 11, 6, tzinfo=BERLIN)
+    assert c["now"] == NOW
+    assert isinstance(c["session"], FakeSession)
+    body = r.json()
+    assert body["from_name"] == "Stuttgart Hbf" and body["to_name"] == "Frankfurt(Main)Hbf"
+    assert body["depart_after"] == "07:45" and body["day_type"] == "weekend"
+    assert body["period"] == {"start": "2026-11-01", "end": "2026-11-05"}
+    assert body["options"][0]["legs"][0]["line"] == "ICE 512"
+    assert body["message"] is None
+
+
+def test_connections_default_day_type_and_period(client, search):
+    r = _conn(client)  # NOW is Tuesday 2026-11-17
+    assert r.status_code == 200
+    assert r.json()["day_type"] == "weekday"
+    assert r.json()["period"] == {"start": "2026-10-21", "end": "2026-11-17"}  # 28 days
+    c = search.calls[0]
+    assert c["start"] == datetime(2026, 10, 21, tzinfo=BERLIN)
+    assert c["end"] == datetime(2026, 11, 18, tzinfo=BERLIN)
+
+
+def test_connections_default_day_type_weekend_in_berlin(search):
+    sat_utc = datetime(2026, 11, 21, 23, 30, tzinfo=ZoneInfo("UTC"))  # Sunday 22nd in Berlin
+    c = TestClient(create_app(FakeSession, clock=lambda: sat_utc))
+    assert _conn(c).json()["day_type"] == "weekend"
+
+
+def test_connections_only_from_or_to_default(client, search):
+    assert _conn(client, to="2026-11-10").json()["period"] == {"start": "2026-10-14", "end": "2026-11-10"}
+    assert _conn(client, **{"from": "2026-11-10"}).json()["period"] == {"start": "2026-11-10", "end": "2026-11-17"}
+
+
+@pytest.mark.parametrize("params", [
+    {"from": "2026-11-10", "to": "2026-11-09"},
+    {"to": "2026-11-18"},
+    {"from": "2026-08-01", "to": "2026-11-02"},
+])
+def test_connections_period_422(client, search, params):
+    assert _conn(client, **params).status_code == 422
+    assert search.calls == []
+
+
+def test_connections_unknown_station_404(client, search):
+    assert _conn(client, from_eva="1234567").status_code == 404
+    assert _conn(client, to_eva="1234567").status_code == 404
+    assert search.calls == []
+
+
+def test_connections_same_station_422(client, search):
+    assert _conn(client, to_eva=EVA).status_code == 422
+    assert search.calls == []
+
+
+@pytest.mark.parametrize("bad", ["8", "25:00", "08:60", "8:00", "0800", "ab:cd", "", "08:00\n", "0\u0668:00"])
+def test_connections_bad_time_422(client, search, bad):
+    assert _conn(client, depart_after=bad).status_code == 422
+    assert search.calls == []
+
+
+def test_connections_bad_day_422(client, search):
+    assert _conn(client, day="holiday").status_code == 422
+
+
+def test_connections_missing_params_422(client, search):
+    assert client.get("/connections").status_code == 422
+    assert client.get("/connections", params={"from_eva": EVA, "to_eva": FRA}).status_code == 422
+
+
+def test_connections_empty_options_message(client, search):
+    search.result["options"] = []
+    body = _conn(client, depart_after="08:15", day="weekday").json()
+    assert body["options"] == []
+    assert body["message"] == (
+        "No connection between Stuttgart Hbf and Frankfurt(Main)Hbf departing 08:15-11:15 "
+        "on weekdays in the observed data."
+    )
+    assert "weekends" in _conn(client, day="weekend").json()["message"]
+
+
+def test_connections_session_closed(client, search, sessions):
+    _conn(client)
+    assert len(sessions) == 1 and sessions[0].closed
+
+
+def test_connections_cors_still_get_only(client, search):
+    h = {"Origin": "http://localhost:5173", "Access-Control-Request-Method": "POST"}
+    assert client.options("/connections", headers=h).status_code == 400
+    h["Access-Control-Request-Method"] = "GET"
+    assert client.options("/connections", headers=h).status_code == 200
 
 
 def test_responses_do_not_leak_settings(client, monkeypatch):
@@ -323,8 +466,6 @@ OTHER_EVA = "8000105"
 
 
 def _stop(sid, line, late=0, at=T0):
-    from datetime import timedelta
-
     from tracker.collector.parser import Event, Stop
 
     dep = Event(planned_time=at, changed_time=at + timedelta(minutes=late) if late else None, line=line)
@@ -380,3 +521,75 @@ def test_e2e_line_detail_summary_matches_line(real_client):
     assert body["by_hour"][0]["stops"] == 3
     assert real_client.get("/lines/ICE%20512").json()["summary"]["stops"] == 1
     assert real_client.get("/lines/NOPE").status_code == 404
+
+
+@pytest.fixture
+def real_search_client(tmp_path):
+    """Real SQLite DB and the real search_connections; the DB is empty, tests seed it."""
+    from tracker.db.session import create_schema, make_engine, make_session_factory
+
+    engine = make_engine(f"sqlite:///{tmp_path / 'c.db'}")
+    create_schema(engine)
+    factory = make_session_factory(engine)
+    yield TestClient(create_app(factory, clock=lambda: NOW)), factory
+    engine.dispose()
+
+
+def test_e2e_connections_empty_history(real_search_client):
+    client, _ = real_search_client
+    r = client.get(
+        "/connections", params={"from_eva": EVA, "to_eva": FRA, "depart_after": "08:00", "day": "weekday"}
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["options"] == []
+    assert body["from_name"] == "Stuttgart Hbf"
+    assert "No connection between Stuttgart Hbf and Frankfurt(Main)Hbf" in body["message"]
+    assert body["period"] == {"start": "2026-10-21", "end": "2026-11-17"}
+
+
+def test_e2e_connections_seeded_direct_train(real_search_client):
+    from sqlalchemy import update
+
+    from tracker.collector.parser import Event, Stop
+    from tracker.db.models import StopEvent
+    from tracker.db.store import upsert_stops
+
+    client, factory = real_search_client
+    # Mon-Wed 2026-11-09..11, before the pinned clock: ICE 512 08:10 -> 09:40, arriving 0, 4, 8 min late.
+    with factory() as s:
+        for day, late in ((9, 0), (10, 4), (11, 8)):
+            dep = datetime(2026, 11, day, 8, 10, tzinfo=BERLIN)
+            arr = datetime(2026, 11, day, 9, 40, tzinfo=BERLIN)
+            trip = f"trip{day}"
+            upsert_stops(s, EVA, "Stuttgart Hbf", [Stop(
+                stop_id=f"{trip}-1", category="ICE", number="512",
+                departure=Event(planned_time=dep, line="ICE 512"),
+            )])
+            upsert_stops(s, FRA, "Frankfurt(Main)Hbf", [Stop(
+                stop_id=f"{trip}-2", category="ICE", number="512",
+                arrival=Event(planned_time=arr, changed_time=arr + timedelta(minutes=late) if late else None,
+                              line="ICE 512"),
+            )])
+        s.execute(update(StopEvent).values(updated_at=NOW))  # observed after planned time
+        s.commit()
+
+    r = client.get("/connections", params={"from_eva": EVA, "to_eva": FRA, "depart_after": "08:00"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["day_type"] == "weekday" and body["message"] is None
+    opt = body["options"][0]
+    assert len(body["options"]) == 1
+    assert opt["transfers"] == 0 and opt["transfer_minutes"] == []
+    assert (opt["planned_departure"], opt["planned_arrival"], opt["planned_duration_minutes"]) == ("08:10", "09:40", 90)
+    (leg,) = opt["legs"]
+    assert (leg["line"], leg["from_eva"], leg["to_eva"]) == ("ICE 512", EVA, FRA)
+    assert (leg["from_name"], leg["to_name"]) == ("Stuttgart Hbf", "Frankfurt(Main)Hbf")
+    assert (leg["departure"], leg["arrival"], leg["runs"]) == ("08:10", "09:40", 3)
+    assert leg["avg_arrival_delay_minutes"] == 4.0
+    assert leg["on_time_share"] == pytest.approx(2 / 3, abs=0.001)  # 8 min late is not on time
+    assert leg["cancelled_share"] == 0.0
+    assert opt["on_time_share"] == pytest.approx(2 / 3, abs=0.001)
+    # Weekend search sees nothing of this weekday history.
+    r2 = client.get("/connections", params={"from_eva": EVA, "to_eva": FRA, "depart_after": "08:00", "day": "weekend"})
+    assert r2.json()["options"] == []

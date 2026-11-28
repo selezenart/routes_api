@@ -82,7 +82,7 @@ class ConnectionLeg(BaseModel):
     to_name: str
     departure: str = Field(description="Planned departure at from_eva, HH:MM Europe/Berlin")
     arrival: str = Field(description="Planned arrival at to_eva, HH:MM Europe/Berlin")
-    runs: int = Field(description="Observed past runs this leg is based on")
+    runs: int = Field(description="Observed past runs this leg is based on (at least 3)")
     avg_arrival_delay_minutes: float | None = Field(description="Mean arrival delay of runs that ran")
     on_time_share: float | None = Field(description="Share of runs that ran and arrived under 6 min late")
     cancelled_share: float = Field(description="Share of runs cancelled on this leg")
@@ -91,7 +91,7 @@ class ConnectionLeg(BaseModel):
 class ConnectionOption(BaseModel):
     legs: list[ConnectionLeg]
     transfers: int
-    transfer_minutes: list[int] = Field(description="Planned slack at each transfer station")
+    transfer_minutes: list[int] = Field(description="Planned slack at each transfer station, 5 to 120 minutes")
     planned_departure: str
     planned_arrival: str
     planned_duration_minutes: int
@@ -99,7 +99,10 @@ class ConnectionOption(BaseModel):
         description="Share of first-leg runs too late for the transfer; null for direct trains"
     )
     expected_arrival_delay_minutes: float = Field(
-        description="Expected delay at the destination, including waiting for the next train after a miss"
+        description=(
+            "Expected delay at the destination: after a missed transfer, the wait for the next "
+            "train; for a cancelled train, a flat 60-minute penalty"
+        )
     )
     on_time_share: float | None = Field(description="Chance to reach the destination under 6 min late")
 
@@ -110,7 +113,10 @@ class ConnectionSearch(BaseModel):
     from_name: str
     to_eva: str
     to_name: str
-    depart_after: str = Field(description="HH:MM Europe/Berlin; options depart within 3 hours after")
+    depart_after: str = Field(description=(
+            "HH:MM Europe/Berlin; options depart within 3 hours after. Trains after midnight "
+            "use the same day type"
+        ))
     day_type: Literal["weekday", "weekend"]
     options: list[ConnectionOption] = Field(description="Best first (earliest expected arrival), at most 3")
     message: str | None = Field(default=None, description="Why options is empty, if it is")

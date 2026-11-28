@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+import re
+from collections.abc import Callable
+from datetime import date, datetime, time, timedelta
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from tracker.api.deps import PeriodRange, get_period, get_session
+from tracker.api.deps import BERLIN, PeriodRange, get_clock, get_period, get_session
 from tracker.api.schemas import (
+    ConnectionSearch,
     DelaySummary,
     LineDetail,
     LineList,
@@ -18,12 +22,29 @@ from tracker.api.schemas import (
     StationStats,
 )
 from tracker.db.stats import hour_stats, line_stats, station_stats
+from tracker.routing.search import WINDOW_HOURS, search_connections
 from tracker.stations import STATIONS
 
 router = APIRouter()
 
 SessionDep = Annotated[Session, Depends(get_session)]
 PeriodDep = Annotated[PeriodRange, Depends(get_period)]
+CONNECTION_DAYS = 28
+_HHMM = re.compile(r"([01][0-9]|2[0-3]):([0-5][0-9])")
+
+
+def get_connection_period(
+    clock: Annotated[Callable[[], datetime], Depends(get_clock)],
+    from_: Annotated[date | None, Query(alias="from", description="First day (Europe/Berlin), inclusive")] = None,
+    to: Annotated[date | None, Query(description="Last day (Europe/Berlin), inclusive")] = None,
+) -> PeriodRange:
+    """Like ``get_period`` (same validation), but the default is the last 28 days."""
+    last = to or clock().astimezone(BERLIN).date()
+    first = from_ or last - timedelta(days=CONNECTION_DAYS - 1)
+    return get_period(clock, first, last)
+
+
+ConnectionPeriodDep = Annotated[PeriodRange, Depends(get_connection_period)]
 
 
 def _period(p: PeriodRange) -> Period:
@@ -73,4 +94,51 @@ def line_detail(line: str, session: SessionDep, p: PeriodDep) -> LineDetail:
         summary=DelaySummary(**rows[0].model_dump(exclude={"line"})),
         by_station=station_stats(session, p.start, p.end, p.now, line=line),
         by_hour=hour_stats(session, p.start, p.end, p.now, line=line),
+    )
+
+
+@router.get(
+    "/connections",
+    summary="Most reliable connections between two stations",
+    tags=["connections"],
+)
+def connections(
+    session: SessionDep,
+    p: ConnectionPeriodDep,
+    from_eva: Annotated[str, Query(description="Start station EVA number")],
+    to_eva: Annotated[str, Query(description="Destination station EVA number")],
+    depart_after: Annotated[str, Query(description="Earliest departure, HH:MM Europe/Berlin")],
+    day: Annotated[Literal["weekday", "weekend"] | None, Query(description="Day type; default: today")] = None,
+) -> ConnectionSearch:
+    for eva in (from_eva, to_eva):
+        if eva not in STATIONS:
+            raise HTTPException(404, f"Unknown station {eva}")
+    if from_eva == to_eva:
+        raise HTTPException(422, "'from_eva' and 'to_eva' must differ")
+    m = _HHMM.fullmatch(depart_after)
+    if not m:
+        raise HTTPException(422, "'depart_after' must be HH:MM (00:00-23:59)")
+    depart = time(int(m[1]), int(m[2]))
+    day_type = day or ("weekend" if p.now.astimezone(BERLIN).weekday() >= 5 else "weekday")
+    options = search_connections(
+        session, from_eva, to_eva, depart, day_type, p.start, p.end, p.now
+    )
+    message = None
+    if not options:
+        end_hour = (depart.hour + WINDOW_HOURS) % 24
+        message = (
+            f"No connection between {STATIONS[from_eva]} and {STATIONS[to_eva]} departing "
+            f"{depart_after}-{end_hour:02d}:{depart.minute:02d} on "
+            f"{'weekdays' if day_type == 'weekday' else 'weekends'} in the observed data."
+        )
+    return ConnectionSearch(
+        period=_period(p),
+        from_eva=from_eva,
+        from_name=STATIONS[from_eva],
+        to_eva=to_eva,
+        to_name=STATIONS[to_eva],
+        depart_after=depart_after,
+        day_type=day_type,
+        options=options,
+        message=message,
     )
